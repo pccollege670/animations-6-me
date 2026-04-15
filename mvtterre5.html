@@ -1,0 +1,646 @@
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mouvements de la Terre - Équinoxes & Solstices</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050505; color: white; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        
+        .draggable-panel {
+            position: absolute;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.85);
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(8px);
+            user-select: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .panel-header {
+            cursor: move;
+            padding: 4px 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-weight: bold;
+            font-size: 0.55rem;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            color: #aaa;
+        }
+
+        .panel-content {
+            padding: 5px;
+            transition: max-height 0.3s ease;
+            overflow: hidden;
+        }
+
+        .collapsed .panel-content {
+            max-height: 0;
+            padding: 0;
+        }
+
+        .toggle-visibility {
+            cursor: pointer;
+            opacity: 0.5;
+            font-size: 0.6rem;
+        }
+        .toggle-visibility:hover { opacity: 1; }
+
+        input[type=range] { width: 100%; cursor: pointer; accent-color: #4dabff; height: 2px; margin-top: 2px; }
+        
+        .btn-control {
+            width: 100%;
+            padding: 3px 5px;
+            margin-bottom: 3px;
+            border-radius: 4px;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.1);
+            font-size: 0.6rem;
+        }
+        
+        .active { background: rgba(50, 150, 50, 0.7); color: white; }
+        .inactive { background: rgba(180, 40, 40, 0.7); color: white; }
+        .focus-active { background: rgba(77, 171, 255, 0.7); color: white; }
+
+        .zoom-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .btn-zoom {
+            width: 24px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-zoom:hover { background: rgba(255, 255, 255, 0.15); }
+        
+        .legend-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+        #controlsPanel { bottom: 15px; left: 15px; width: 110px; }
+        #settingsPanel { bottom: 15px; left: 135px; width: 140px; }
+        #labelsPanel { top: 15px; left: 15px; width: 100px; }
+        #zoomPanel { bottom: 15px; right: 15px; width: 45px; }
+        #legendPanel { top: 15px; right: 15px; width: 140px; }
+
+        #globalToggle {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2000;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.55rem;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="globalToggle">👁️ Masquer l'interface</button>
+
+    <div id="controlsPanel" class="draggable-panel">
+        <div class="panel-header" id="controlsHeader">
+            <span class="text-blue-500">●</span> Mouvements
+            <span class="ml-auto flex gap-1">
+                <span class="toggle-visibility" onclick="togglePanel('controlsPanel')">👁️</span>
+            </span>
+        </div>
+        <div class="panel-content">
+            <button id="toggleRotation" class="btn-control active">
+                <span id="rotIcon">🔄</span> <span id="rotText">Rotation</span>
+            </button>
+            <button id="toggleOrbit" class="btn-control active">
+                <span id="orbIcon">🌍</span> <span id="orbText">Orbite</span>
+            </button>
+            <button id="toggleFocus" class="btn-control inactive">
+                <span id="focusIcon">🎯</span> <span id="focusText">Focus Terre</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="settingsPanel" class="draggable-panel">
+        <div class="panel-header" id="settingsHeader">
+            <span class="text-yellow-500">●</span> Vitesses
+            <span class="ml-auto flex gap-1">
+                <span class="toggle-visibility" onclick="togglePanel('settingsPanel')">👁️</span>
+            </span>
+        </div>
+        <div class="panel-content">
+            <div class="mb-2">
+                <div class="flex justify-between text-[8px] text-gray-500 mb-0 uppercase">
+                    <span>Rot.</span>
+                    <span id="rotVal" class="text-white">1.5x</span>
+                </div>
+                <input type="range" id="rotationSpeed" min="0" max="5" step="0.1" value="1.5">
+            </div>
+            <div>
+                <div class="flex justify-between text-[8px] text-gray-500 mb-0 uppercase">
+                    <span>Rév.</span>
+                    <span id="orbVal" class="text-white">1.0x</span>
+                </div>
+                <input type="range" id="orbitSpeed" min="0" max="5" step="0.1" value="1">
+            </div>
+        </div>
+    </div>
+
+    <div id="labelsPanel" class="draggable-panel">
+        <div class="panel-header" id="labelsHeader">
+            <span class="text-purple-500">●</span> Visuel
+            <span class="ml-auto flex gap-1">
+                <span class="toggle-visibility" onclick="togglePanel('labelsPanel')">👁️</span>
+            </span>
+        </div>
+        <div class="panel-content">
+            <button id="toggleLabels" class="btn-control active">
+                <span id="labelIcon">🏷️</span> <span id="labelText">Labels</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="zoomPanel" class="draggable-panel">
+        <div class="panel-header" id="zoomHeader">
+            <span class="text-green-500">●</span> ZOOM
+        </div>
+        <div class="panel-content flex flex-col items-center">
+            <div class="zoom-vertical">
+                <button id="zoomIn" class="btn-zoom" title="Zoomer">+</button>
+                <button id="zoomOut" class="btn-zoom" title="Dézoomer">−</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="legendPanel" class="draggable-panel">
+        <div class="panel-header" id="legendHeader">
+            <span class="text-red-500">●</span> Repères
+            <span class="ml-auto">
+                <span class="toggle-visibility" onclick="togglePanel('legendPanel')">👁️</span>
+            </span>
+        </div>
+        <div class="panel-content space-y-1">
+            <div class="flex items-center gap-1.5 text-[8px]">
+                <div class="legend-dot" style="background:#ffffff; border: 1px solid #555"></div> 
+                <span class="text-white font-bold">Équateur (Blanc)</span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[8px]">
+                <div class="legend-dot" style="background:#ff3333"></div> 
+                <span class="text-white font-bold">45° Nord (Rouge)</span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[8px]">
+                <div class="legend-dot" style="background:#ffff00"></div> 
+                <span class="text-white font-bold">45° Sud (Jaune)</span>
+            </div>
+            <hr class="opacity-10 my-1">
+            <div class="flex items-center gap-1.5 text-[8px]">
+                <div class="legend-dot" style="background:#ffcc00"></div> 
+                <span class="text-gray-400">Solstice Été</span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[8px]">
+                <div class="legend-dot" style="background:#ff8800"></div> 
+                <span class="text-gray-400">Équinoxe Automne</span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[8px]">
+                <div class="legend-dot" style="background:#00ccff"></div> 
+                <span class="text-gray-400">Solstice Hiver</span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[8px]">
+                <div class="legend-dot" style="background:#00ff66"></div> 
+                <span class="text-gray-400">Équinoxe Printemps</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, earth, sun, earthGroup, axialTiltGroup, pointLight;
+        let orbitClock = 0;
+        let labelMeshes = [];
+        let markerMeshes = [];
+        let allPanelsVisible = true;
+        
+        let moveState = { 
+            rotation: true, 
+            orbit: true,
+            labels: true,
+            focusEarth: false
+        };
+
+        const PARAMS = {
+            rotationSpeed: 0.015,
+            orbitSpeed: 0.002,
+            orbitRadius: 28,
+            axialTilt: 23.5 * (Math.PI / 180),
+            minZoom: 5,
+            maxZoom: 250,
+            defaultCamPos: new THREE.Vector3(0, 35, 75)
+        };
+
+        const SAISONS = [
+            { name: "Solstice d'Été", angle: 0, color: "#ffcc00" },
+            { name: "Équinoxe d'Automne", angle: Math.PI / 2, color: "#ff8800" },
+            { name: "Solstice d'Hiver", angle: Math.PI, color: "#00ccff" },
+            { name: "Équinoxe de Printemps", angle: 3 * Math.PI / 2, color: "#00ff66" }
+        ];
+
+        function createEarthTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 2048;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#0a1a2f';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const toX = (lon) => (lon + 180) * (canvas.width / 360);
+            const toY = (lat) => (90 - lat) * (canvas.height / 180);
+
+            function drawContinent(points, color) {
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(toX(points[0][0]), toY(points[0][1]));
+                for (let i = 1; i < points.length; i++) {
+                    ctx.lineTo(toX(points[i][0]), toY(points[i][1]));
+                }
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            const landColor = '#2d5a27';
+
+            drawContinent([
+                [-168, 65], [-120, 70], [-100, 75], [-60, 75], [-50, 50], 
+                [-60, 45], [-80, 25], [-100, 15], [-110, 30], [-125, 45], [-160, 60]
+            ], landColor);
+
+            drawContinent([
+                [-81, 12], [-35, -5], [-40, -35], [-70, -55], [-75, -40], [-80, -10], [-81, 10]
+            ], landColor);
+
+            drawContinent([
+                [-17, 35], [30, 37], [51, 12], [40, -35], [18, -35], [-10, 5], [-17, 15]
+            ], landColor);
+
+            drawContinent([
+                [-10, 35], [40, 35], [120, 35], [145, 45], [180, 70], [100, 80], [40, 80], [-10, 60]
+            ], landColor);
+            
+            drawContinent([
+                [60, 25], [80, 5], [100, 20], [120, 10], [130, 25], [100, 35]
+            ], landColor);
+
+            drawContinent([
+                [113, -20], [150, -15], [153, -40], [115, -35]
+            ], landColor);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, toY(-75), canvas.width, canvas.height);
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            for(let i=0; i<=360; i+=30) {
+                ctx.beginPath(); ctx.moveTo(toX(i-180), 0); ctx.lineTo(toX(i-180), canvas.height); ctx.stroke();
+            }
+            for(let i=-90; i<=90; i+=30) {
+                ctx.beginPath(); ctx.moveTo(0, toY(i)); ctx.lineTo(canvas.width, toY(i)); ctx.stroke();
+            }
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function togglePanel(id) {
+            const panel = document.getElementById(id);
+            panel.classList.toggle('collapsed');
+        }
+
+        function createTextLabel(text, color) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 1024; canvas.height = 256;
+            context.font = "Bold 80px 'Segoe UI'";
+            context.fillStyle = color;
+            context.textAlign = "center";
+            context.textBaseline = "middle";
+            context.fillText(text, 512, 128);
+            const texture = new THREE.CanvasTexture(canvas);
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0 }));
+            sprite.scale.set(30, 7.5, 1);
+            return sprite;
+        }
+
+        function createOrbitPoint(color, angle, radius) {
+            const group = new THREE.Group();
+            const point = new THREE.Mesh(
+                new THREE.SphereGeometry(0.6, 16, 16), 
+                new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.8 })
+            );
+            point.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+            const glow = new THREE.Mesh(
+                new THREE.SphereGeometry(1.2, 16, 16),
+                new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.2 })
+            );
+            glow.position.copy(point.position);
+            group.add(point);
+            group.add(glow);
+            return group;
+        }
+
+        function createMarker(color, lat, lon, radius) {
+            const group = new THREE.Group();
+            const marker = new THREE.Mesh(
+                new THREE.SphereGeometry(0.2, 16, 16), 
+                new THREE.MeshBasicMaterial({ color: color })
+            );
+            
+            const phi = (90 - lat) * (Math.PI / 180);
+            const theta = (lon + 180) * (Math.PI / 180);
+            
+            marker.position.x = radius * Math.sin(phi) * Math.cos(theta);
+            marker.position.y = radius * Math.cos(phi);
+            marker.position.z = radius * Math.sin(phi) * Math.sin(theta);
+            
+            const lineGeom = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0,0,0),
+                marker.position.clone().normalize().multiplyScalar(radius + 1)
+            ]);
+            const line = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: 0.4 }));
+            
+            group.add(marker);
+            group.add(line);
+            return group;
+        }
+
+        function createEquator(radius) {
+            const curve = new THREE.EllipseCurve(0, 0, radius + 0.05, radius + 0.05);
+            const points = curve.getPoints(64);
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            geometry.rotateX(Math.PI / 2); // Placer sur le plan horizontal (équateur)
+            const material = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+            return new THREE.Line(geometry, material);
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.copy(PARAMS.defaultCamPos);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
+
+            const stars = new THREE.BufferGeometry();
+            const pos = [];
+            for(let i=0; i<8000; i++) pos.push((Math.random()-0.5)*1500, (Math.random()-0.5)*1500, (Math.random()-0.5)*1500);
+            stars.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+            scene.add(new THREE.Points(stars, new THREE.PointsMaterial({color:0xffffff, size: 0.6})));
+
+            sun = new THREE.Mesh(new THREE.SphereGeometry(4, 32, 32), new THREE.MeshBasicMaterial({ color: 0xffea00 }));
+            scene.add(sun);
+            
+            pointLight = new THREE.PointLight(0xffffff, 2.5, 300);
+            scene.add(pointLight);
+            scene.add(new THREE.AmbientLight(0x202020));
+
+            const orbitThickness = 0.1; 
+            const orbitGeom = new THREE.RingGeometry(PARAMS.orbitRadius - orbitThickness, PARAMS.orbitRadius + orbitThickness, 128);
+            orbitGeom.rotateX(Math.PI / 2);
+            scene.add(new THREE.Mesh(orbitGeom, new THREE.MeshBasicMaterial({ 
+                color: 0x444444, 
+                side: THREE.DoubleSide, 
+                transparent: true, 
+                opacity: 0.3 
+            })));
+
+            SAISONS.forEach((s) => {
+                const orbitMarker = createOrbitPoint(s.color, s.angle, PARAMS.orbitRadius);
+                scene.add(orbitMarker);
+                markerMeshes.push(orbitMarker);
+
+                const label = createTextLabel(s.name, s.color);
+                label.position.set(Math.cos(s.angle) * (PARAMS.orbitRadius + 8), 5, Math.sin(s.angle) * (PARAMS.orbitRadius + 8));
+                labelMeshes.push({ mesh: label, angle: s.angle });
+                scene.add(label);
+            });
+
+            earthGroup = new THREE.Group();
+            scene.add(earthGroup);
+            axialTiltGroup = new THREE.Group();
+            axialTiltGroup.rotation.z = PARAMS.axialTilt; 
+            earthGroup.add(axialTiltGroup);
+
+            const earthRadius = 2.1;
+            earth = new THREE.Mesh(
+                new THREE.SphereGeometry(earthRadius, 64, 64), 
+                new THREE.MeshPhongMaterial({ 
+                    map: createEarthTexture(),
+                    shininess: 10 
+                })
+            );
+            axialTiltGroup.add(earth);
+
+            // Ajout de l'Equateur
+            const equatorLine = createEquator(earthRadius);
+            axialTiltGroup.add(equatorLine);
+
+            earth.add(createMarker(0xff3333, 45, 0, earthRadius + 0.1));  // 45° Nord
+            earth.add(createMarker(0xffff00, -45, 0, earthRadius + 0.1)); // 45° Sud
+
+            const axisLine = new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -5, 0), new THREE.Vector3(0, 5, 0)]),
+                new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.3, transparent: true })
+            );
+            axialTiltGroup.add(axisLine);
+
+            setupInteractions();
+            makeDraggable(document.getElementById('controlsPanel'), document.getElementById('controlsHeader'));
+            makeDraggable(document.getElementById('settingsPanel'), document.getElementById('settingsHeader'));
+            makeDraggable(document.getElementById('labelsPanel'), document.getElementById('labelsHeader'));
+            makeDraggable(document.getElementById('legendPanel'), document.getElementById('legendHeader'));
+            makeDraggable(document.getElementById('zoomPanel'), document.getElementById('zoomHeader'));
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function applyZoom(delta) {
+            const target = moveState.focusEarth ? earthGroup.position : new THREE.Vector3(0,0,0);
+            const dist = camera.position.distanceTo(target);
+            let newDist = Math.max(PARAMS.minZoom, Math.min(dist + delta, PARAMS.maxZoom));
+            
+            const direction = new THREE.Vector3().subVectors(camera.position, target).normalize();
+            camera.position.copy(target).add(direction.multiplyScalar(newDist));
+            camera.lookAt(target);
+        }
+
+        function makeDraggable(el, header) {
+            let isDragging = false, offset = { x: 0, y: 0 };
+            header.onmousedown = (e) => {
+                if (e.target.classList.contains('toggle-visibility')) return;
+                isDragging = true;
+                const rect = el.getBoundingClientRect();
+                offset.x = e.clientX - rect.left;
+                offset.y = e.clientY - rect.top;
+                el.style.bottom = 'auto'; el.style.right = 'auto';
+                el.style.top = rect.top + 'px'; el.style.left = rect.left + 'px';
+                header.style.cursor = 'grabbing';
+            };
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    el.style.left = (e.clientX - offset.x) + 'px';
+                    el.style.top = (e.clientY - offset.y) + 'px';
+                }
+            });
+            document.addEventListener('mouseup', () => { isDragging = false; header.style.cursor = 'move'; });
+        }
+
+        function setupInteractions() {
+            document.getElementById('globalToggle').onclick = () => {
+                allPanelsVisible = !allPanelsVisible;
+                const panels = document.querySelectorAll('.draggable-panel');
+                panels.forEach(p => p.style.opacity = allPanelsVisible ? "1" : "0");
+                panels.forEach(p => p.style.pointerEvents = allPanelsVisible ? "auto" : "none");
+                document.getElementById('globalToggle').innerText = allPanelsVisible ? "👁️ Masquer l'interface" : "👁️ Afficher l'interface";
+            };
+
+            document.getElementById('toggleRotation').onclick = (e) => {
+                moveState.rotation = !moveState.rotation;
+                e.currentTarget.className = moveState.rotation ? "btn-control active" : "btn-control inactive";
+            };
+            document.getElementById('toggleOrbit').onclick = (e) => {
+                moveState.orbit = !moveState.orbit;
+                e.currentTarget.className = moveState.orbit ? "btn-control active" : "btn-control inactive";
+            };
+            document.getElementById('toggleLabels').onclick = (e) => {
+                moveState.labels = !moveState.labels;
+                e.currentTarget.className = moveState.labels ? "btn-control active" : "btn-control inactive";
+            };
+
+            document.getElementById('toggleFocus').onclick = (e) => {
+                moveState.focusEarth = !moveState.focusEarth;
+                e.currentTarget.className = moveState.focusEarth ? "btn-control focus-active" : "btn-control inactive";
+                document.getElementById('focusText').innerText = moveState.focusEarth ? "Libérer Caméra" : "Focus Terre";
+                
+                if (moveState.focusEarth) {
+                    const direction = new THREE.Vector3().subVectors(camera.position, earthGroup.position).normalize();
+                    camera.position.copy(earthGroup.position).add(direction.multiplyScalar(15));
+                } else {
+                    camera.position.copy(PARAMS.defaultCamPos);
+                }
+                camera.lookAt(moveState.focusEarth ? earthGroup.position : new THREE.Vector3(0,0,0));
+            };
+
+            document.getElementById('zoomIn').onclick = () => applyZoom(-12);
+            document.getElementById('zoomOut').onclick = () => applyZoom(12);
+            document.getElementById('rotationSpeed').oninput = (e) => { 
+                PARAMS.rotationSpeed = 0.01 * e.target.value; 
+                document.getElementById('rotVal').innerText = e.target.value + "x";
+            };
+            document.getElementById('orbitSpeed').oninput = (e) => { 
+                PARAMS.orbitSpeed = 0.002 * e.target.value; 
+                document.getElementById('orbVal').innerText = e.target.value + "x";
+            };
+
+            let viewDragging = false, lastX, lastY;
+            renderer.domElement.onmousedown = () => viewDragging = true;
+            window.addEventListener('mouseup', () => viewDragging = false);
+            window.addEventListener('mousemove', (e) => {
+                if(viewDragging) {
+                    const sensitivity = 0.005;
+                    const dx = (e.clientX - lastX) * sensitivity;
+                    const dy = (e.clientY - lastY) * sensitivity;
+
+                    if (moveState.focusEarth) {
+                        const offset = new THREE.Vector3().subVectors(camera.position, earthGroup.position);
+                        const radius = offset.length();
+                        let theta = Math.atan2(offset.x, offset.z);
+                        let phi = Math.acos(offset.y / radius);
+                        theta -= dx;
+                        phi -= dy;
+                        phi = Math.max(0.1, Math.min(Math.PI - 0.1, phi));
+                        offset.x = radius * Math.sin(phi) * Math.sin(theta);
+                        offset.y = radius * Math.cos(phi);
+                        offset.z = radius * Math.sin(phi) * Math.cos(theta);
+                        camera.position.copy(earthGroup.position).add(offset);
+                    } else {
+                        scene.rotation.y += dx;
+                        scene.rotation.x += dy;
+                    }
+                }
+                lastX = e.clientX; lastY = e.clientY;
+            });
+            document.onwheel = (e) => applyZoom(e.deltaY * 0.04);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function updateLabels() {
+            const currentAngle = (orbitClock % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+            labelMeshes.forEach(item => {
+                if (!moveState.labels) {
+                    item.mesh.material.opacity = 0;
+                    return;
+                }
+                let diff = Math.abs(currentAngle - item.angle);
+                if (diff > Math.PI) diff = 2 * Math.PI - diff;
+                const threshold = 0.4; 
+                if (diff < threshold) {
+                    item.mesh.material.opacity = Math.pow(1 - (diff / threshold), 2.0);
+                } else {
+                    item.mesh.material.opacity = 0;
+                }
+                const scale = camera.position.distanceTo(item.mesh.position) * 0.45;
+                item.mesh.scale.set(scale, scale / 4, 1);
+                item.mesh.lookAt(camera.position);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if(moveState.rotation) earth.rotation.y += PARAMS.rotationSpeed;
+            if(moveState.orbit) {
+                const oldPos = earthGroup.position.clone();
+                orbitClock += PARAMS.orbitSpeed;
+                earthGroup.position.set(Math.cos(orbitClock) * PARAMS.orbitRadius, 0, Math.sin(orbitClock) * PARAMS.orbitRadius);
+                if (moveState.focusEarth) {
+                    const movement = new THREE.Vector3().subVectors(earthGroup.position, oldPos);
+                    camera.position.add(movement);
+                }
+            }
+            if (moveState.focusEarth) camera.lookAt(earthGroup.position);
+            updateLabels();
+            renderer.render(scene, camera);
+        }
+
+            window.onload = function () {
+                init();
+                animate();
+            }
+    </script>
+</body>
+</html>
